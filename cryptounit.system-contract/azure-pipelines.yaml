@@ -1,0 +1,35 @@
+pool:
+  name: 'default-agent-pool'
+container: markets.azurecr.io/contracts-build:latest
+
+steps:
+- script: |
+    set -xe
+
+    cd contracts/eosio.bios/src/
+    eosio-cpp -abigen eosio.bios.cpp  -I./ -I../include  -o ../../../eosio.bios.wasm
+    cd -
+    cd contracts/eosio.msig/src/
+    eosio-cpp -abigen eosio.msig.cpp  -I./ -I../include -o ../../../eosio.msig.wasm
+    cd -
+    cd contracts/eosio.system/src/
+    eosio-cpp -abigen eosio.system.cpp  -I./ -I../include -I../../eosio.token/include  -o ../../../eosio.system.wasm
+    cd -
+    cd contracts/eosio.token/src/
+    eosio-cpp -abigen eosio.token.cpp  -I./ -I../include -o ../../../eosio.token.wasm
+    cd -
+    cd contracts/eosio.wrap/src/
+    eosio-cpp -abigen eosio.wrap.cpp  -I./ -I../include -o ../../../eosio.wrap.wasm
+    cd -
+
+  displayName: 'Build'
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(Build.SourcesDirectory)'
+    contents: '?(*.wasm|*.abi)'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName:  contract
