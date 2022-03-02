@@ -104,8 +104,12 @@ void token::transfer( name    from,
     require_auth( from );
     check( is_account( to ), "to account does not exist");
 
-    if( to != _staker )     // let reward back for staker in any case
-    	check( islocked( from ), "from account is locked" );
+    action(
+    	permission_level{_self,"active"_n},
+		_limiter,
+		name("checklimit"),
+		std::make_tuple(from, to, quantity, memo)
+    ).send();
 
     auto sym = quantity.symbol.code();
     stats statstable( _self, sym.raw() );
@@ -203,25 +207,6 @@ void token::close( name owner, const symbol& symbol )
    acnts.erase( it );
 }
 
-bool token::islocked( name owner )
-{
-    acclocks lockstable( _self, _self.value );
-    const auto& it = lockstable.find( owner.value );
-    return (it == lockstable.end());
-}
-
-void token::lock( name owner )
-{
-    require_auth(_self);
-    acclocks lockstable( _self, _self.value );
-    const auto& it = lockstable.find( owner.value );
-    if (it == lockstable.end()) {
-        lockstable.emplace( _self, [&]( auto& a ) {
-            a.owner = owner;
-        });
-    }
-}
-
 void token::unlock( name owner )
 {
     require_auth(_self);
@@ -234,4 +219,4 @@ void token::unlock( name owner )
 
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::token, (create)(issue)(transfer)(open)(close)(retire)(lock)(unlock) )
+EOSIO_DISPATCH( eosio::token, (create)(issue)(transfer)(open)(close)(retire)(unlock) )

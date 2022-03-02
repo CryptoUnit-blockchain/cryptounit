@@ -22,7 +22,7 @@ namespace eosio {
          static constexpr eosio::symbol _usdu_symbol    = eosio::symbol(eosio::symbol_code("USDU"), 4);
 
          static constexpr eosio::name _tokenlock = "tokenlock"_n;   
-         static constexpr eosio::name _staker = "staker"_n;
+         static constexpr eosio::name _limiter = "limiter"_n;
          
          [[eosio::action]]
          void create( name   issuer,
@@ -45,9 +45,6 @@ namespace eosio {
 
          [[eosio::action]]
          void close( name owner, const symbol& symbol );
-
-         [[eosio::action]]
-         void lock( name owner );
 
          [[eosio::action]]
          void unlock( name owner );
@@ -80,7 +77,6 @@ namespace eosio {
          using transfer_action = eosio::action_wrapper<"transfer"_n, &token::transfer>;
          using open_action = eosio::action_wrapper<"open"_n, &token::open>;
          using close_action = eosio::action_wrapper<"close"_n, &token::close>;
-         using lock_action = eosio::action_wrapper<"lock"_n, &token::lock>;
          using unlock_action = eosio::action_wrapper<"unlock"_n, &token::unlock>;
 
 
@@ -113,7 +109,6 @@ namespace eosio {
 
          void sub_balance( name owner, asset value );
          void add_balance( name owner, asset value, name ram_payer );
-         bool islocked( name owner );
    };
 
 } /// namespace eosio

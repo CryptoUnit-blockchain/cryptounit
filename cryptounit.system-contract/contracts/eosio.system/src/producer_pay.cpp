@@ -15,7 +15,16 @@ namespace eosiosystem {
    const uint32_t blocks_per_hour       = 2 * 3600;
    const int64_t  useconds_per_day      = 24 * 3600 * int64_t(1000000);
    const int64_t  useconds_per_year     = seconds_per_year*1000000ll;
-   const uint64_t usecs_block_period    = 500000; 
+   const uint64_t usecs_block_period    = 500000;
+
+   // ( owner_percent + producers_percent + stakers_percent ) == 100
+   uint32_t owner_percent = 20;
+   uint32_t producers_percent = 40;
+   uint32_t stakers_percent = 40;
+   const eosio::time_point upd_percentage_time_point =
+		eosio::time_point( { eosio::microseconds{
+			1639735200000000  // Dec 17 2021 12:00:00 GMT+0200
+		} } );
 
    void system_contract::onblock( ignore<block_header> ) {
       using namespace eosio;
@@ -82,7 +91,7 @@ namespace eosiosystem {
 
 
    void system_contract::emit_to_buckets(){
-      auto ct = current_time_point();
+      time_point ct = current_time_point();
 
       const asset token_supply   = eosio::token::get_supply(token_account, core_symbol().code() );
       const asset max_supply = eosio::token::get_max_supply(token_account, core_symbol().code() ); 
@@ -91,22 +100,31 @@ namespace eosiosystem {
       
       if( usecs_since_last_fill > 0 ) {
          
-         time_point ct_minus_block = time_point{microseconds{static_cast<int64_t>((ct - time_point{ microseconds{usecs_block_period}}).count())}};
+         time_point ct_minus_block = time_point {
+        	 microseconds {
+        		 static_cast<int64_t>(
+        			( ct - time_point { microseconds { usecs_block_period } } ) //-500000 us, i.e. 0.5 s
+					.count() )
+        	 }
+         };
 
-         uint64_t current_step = get_current_emission_step(ct_minus_block);
+         int64_t current_step = get_current_emission_step(ct_minus_block);
          
-         auto emission_rate = get_emission_rate(current_step); 
-         
+         int64_t emission_rate = get_emission_rate(current_step);
 
-         
-         if (_gstate4.current_emission_rate.amount != emission_rate){
+         if ( _gstate4.current_emission_rate.amount != emission_rate ) {
+
             _gstate4.current_emission_rate = asset(emission_rate, core_symbol());
             _gstate4.next_emission_step_start_at = get_next_step_date(current_step);
             _gstate4.next_emission_rate = asset(get_next_emission_rate(current_step), core_symbol());
+
+         } else if( _gstate4.next_emission_step_start_at < ct_minus_block ) {
+
+        	 _gstate4.next_emission_step_start_at = get_next_step_date( current_step );
+
          }
 
-
-         uint64_t new_tokens;
+         int64_t new_tokens;
 
          if (token_supply.amount + emission_rate <= max_supply.amount){
 
@@ -120,14 +138,29 @@ namespace eosiosystem {
          }
 
          if (new_tokens > 0){    
-            auto to_producers     = new_tokens / 20;
-            auto to_savings       = new_tokens - to_producers;
-            auto to_per_block_pay = to_producers / 4;
-            auto to_per_vote_pay  = to_producers - to_per_block_pay;
+            int64_t to_savings;       //stakers
+            int64_t to_per_block_pay; //producers
+            int64_t to_per_vote_pay;  //producers
+            int64_t to_owner;        //owner
+
+            int64_t to_owner_and_producers;
+            int64_t to_producers;
+
+            if(ct > upd_percentage_time_point) {
+            	uint32_t owner_and_producers_percent = producers_percent + owner_percent;
+                to_owner_and_producers = new_tokens * owner_and_producers_percent / 100;
+                to_producers = to_owner_and_producers * producers_percent / owner_and_producers_percent;
+            } else {
+                to_producers = to_owner_and_producers = new_tokens / 20;
+            }
+            to_savings       = new_tokens - to_owner_and_producers;
+            to_owner        = to_owner_and_producers - to_producers;
+            to_per_block_pay = to_producers / 4;
+            to_per_vote_pay  = to_producers - to_per_block_pay;
 
             INLINE_ACTION_SENDER(eosio::token, issue)(
                token_account, { {_self, active_permission} },
-               { _self, asset(new_tokens, core_symbol()), std::string("issue tokens for producer pay and savings") }
+               { _self, asset(new_tokens, core_symbol()), std::string("issue tokens for owner, producers pay and savings") }
             );
 
             INLINE_ACTION_SENDER(eosio::token, transfer)(
@@ -145,6 +178,13 @@ namespace eosiosystem {
                { _self, vpay_account, asset(to_per_vote_pay, core_symbol()), "fund per-vote bucket" }
             );
             
+            if( to_owner > 0 ) {
+                INLINE_ACTION_SENDER(eosio::token, transfer)(
+                   token_account, { {_self, active_permission} },
+                   { _self, owner_account, asset(to_owner, core_symbol()), "fund owner bucket" }
+                );
+            }
+
             _gstate.pervote_bucket          += to_per_vote_pay;
             _gstate.perblock_bucket         += to_per_block_pay;
             _gstate.last_pervote_bucket_fill = ct;
@@ -161,7 +201,7 @@ namespace eosiosystem {
       const auto& prod = _producers.get( owner.value );
       check( prod.active(), "producer does not have an active key" );
 
-      const auto ct = current_time_point();
+      const time_point ct = current_time_point();
 
       check((_gstate.thresh_activated_stake_time != time_point{ microseconds{0}})
          || (_gstate.thresh_activated_stake_time <= ct), "cannot claim rewards until chain is activated" );

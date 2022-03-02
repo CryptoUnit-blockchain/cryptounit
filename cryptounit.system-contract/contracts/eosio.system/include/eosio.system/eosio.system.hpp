@@ -394,6 +394,7 @@ namespace eosiosystem {
       public:
          static constexpr eosio::name active_permission{"active"_n};
          static constexpr eosio::name token_account{"eosio.token"_n};
+         static constexpr eosio::name owner_account{"cryptounit"_n};
          static constexpr eosio::name ram_account{"eosio.ram"_n};
          static constexpr eosio::name ramfee_account{"eosio.ramfee"_n};
          static constexpr eosio::name stake_account{"eosio.stake"_n};
@@ -803,13 +804,13 @@ namespace eosiosystem {
 
 
          void emit_to_buckets();
-         uint64_t get_emission_rate(uint64_t current_step);
-
-         time_point get_right_time_border(time_point last_update);
-         time_point get_left_time_border(time_point last_update);
          int64_t get_current_emission_step(time_point last_update);
-         time_point get_next_step_date(uint64_t current_step);
-         uint64_t get_next_emission_rate(uint64_t current_step);
+         int64_t get_emission_rate(int64_t current_step);
+         int64_t get_next_emission_rate(int64_t current_step);
+         time_point get_next_step_date(int64_t current_step);
+
+         time_point get_right_time_border(time_point last_update, time_point ct);
+         time_point get_left_time_border(time_point last_update);
 
 
 
