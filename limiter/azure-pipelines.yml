@@ -1,0 +1,19 @@
+pool:
+  name: 'default-agent-pool'
+container: markets.azurecr.io/contracts-build:latest
+
+steps:
+- script: |
+    set -xe
+    eosio-cpp -abigen limiter.cpp  -I./ -o ./limiter.wasm
+  displayName: 'Build'
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(Build.SourcesDirectory)'
+    contents: '**/?(*.wasm|*.abi)'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName:  contract
