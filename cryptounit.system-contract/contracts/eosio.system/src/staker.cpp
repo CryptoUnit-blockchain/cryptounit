@@ -293,10 +293,53 @@ namespace eosiosystem {
       }
    }
 
+#ifdef TEST_CONTRACT
+   void system_contract::modifystaked(const eosio::name username, const eosio::asset quantity) {
+      require_auth(_tokenlock);
+
+      stakers_index stakers_instance(_self, _self.value);
+
+      auto st = stakers_instance.find(username.value);
+
+      check(st != stakers_instance.end(), "staker not found");
+      check(quantity.symbol == _wcru_symbol, "wcru frozen staked balance can be fixed only");
+      check(st->staked_frozen_wcru_balance >= quantity, "Not enought frozen tokens to fix balance");
+
+      stakers_instance.modify(st, username, [&](auto &s){
+            s.staked_wcru_balance -= quantity;
+      });
+      _gstate4.total_stakers_frozen_wcru_balance -= quantity;
+   }
+#endif
+
+   void system_contract::fixwcrubal(const eosio::name username, const eosio::asset quantity) {
+      require_auth(_tokenlock);
+
+      stakers_index stakers_instance(_self, _self.value);
+
+      auto st = stakers_instance.find(username.value);
+
+      check(st != stakers_instance.end(), "staker not found");
+      check(quantity.symbol == _wcru_symbol, "wcru frozen staked balance can be fixed only");
+      check(quantity.amount > 0, "invalid wcru frozen staked balance fix");
+      check(st->staked_frozen_wcru_balance >= quantity, "Not enought frozen tokens to fix balance");
+
+      INLINE_ACTION_SENDER(eosio::token, transfer)(
+         token_account, { { _tokenlock, active_permission} },
+         { _tokenlock, stake_account, quantity, std::string("Frozen staked to staked") }
+      );
+
+      stakers_instance.modify(st, _tokenlock, [&](auto &s){
+            s.staked_frozen_wcru_balance -= quantity;
+      });
+
+      _gstate4.total_stakers_frozen_wcru_balance -= quantity;
+   }
 
    void system_contract::frunstake(const eosio::name username, const eosio::asset quantity) {
       require_auth(_tokenlock);
-	
+
+      uint32_t ct_utc = current_time_point().sec_since_epoch();
       system_contract::refresh(username);
       system_contract::refresh(username);
 
@@ -308,7 +351,7 @@ namespace eosiosystem {
          check(st -> staked_frozen_wcru_balance.amount >= quantity.amount, "Not enought frozen tokens for unstake");      
          check(st -> staked_balance >= quantity.amount, "Not enought tokens for unstake");     
 
-         check(st -> last_update_at == current_time_point(), "Impossible unstake not refreshed balance. Refresh balance first and try again.");
+         check(st->last_update_at.sec_since_epoch() >= ct_utc, "Impossible unstake not refreshed balance. Refresh balance first and try again.");
 
 
          stakers_instance.modify(st, username, [&](auto &s){
@@ -329,8 +372,7 @@ namespace eosiosystem {
       require_auth(_tokenlock);
       eosio::check(quantity.symbol == _wcru_symbol, "Wrong token symbol for staking");
       
-      auto ct = current_time_point();
-      
+      uint32_t ct_utc = current_time_point().sec_since_epoch();
       system_contract::refresh(username);
       system_contract::refresh(username);
 
@@ -342,7 +384,7 @@ namespace eosiosystem {
 
          stakers_instance.emplace(_self, [&](auto &s){
             s.username = username;
-            s.last_update_at = ct;
+            s.last_update_at = current_time_point();
             s.staked_balance = quantity.amount;
             s.staked_frozen_wcru_balance = quantity;
             s.staked_cru_balance = asset(0, _cru_symbol);
@@ -354,7 +396,7 @@ namespace eosiosystem {
          
       } else {
 
-         check(st -> last_update_at == ct, "Impossible to stake before full refresh balance.");
+         check( st->staked_balance == 0 || st->last_update_at.sec_since_epoch() >= ct_utc, "Impossible to frstake before full refresh balance." );
 
          stakers_instance.modify(st ,_self, [&](auto &s){
             s.staked_balance += quantity.amount;
@@ -438,14 +480,14 @@ namespace eosiosystem {
        permission_level{_self,"active"_n},
        _tokenlock,
        name("chlbal"),
-       std::make_tuple(username, quantity, uint64_t(0))
+       std::make_tuple(username, quantity, uint64_t(0)) //total
      ).send();
 
       action(
        permission_level{_self,"active"_n},
        _tokenlock,
        name("chlbal"),
-       std::make_tuple(username, quantity, uint64_t(2))
+       std::make_tuple(username, quantity, uint64_t(2)) //staked
      ).send();
 
 
@@ -461,8 +503,11 @@ namespace eosiosystem {
 
       stakers3_index stakers3_instance(_self, _self.value);
       auto staker = stakers3_instance.find(username.value);
-      
+#ifdef TEST_CONTRACT
+      if (staker != stakers3_instance.end() && staker->last_update_at < current_time_point()) {
+#else
       if (staker != stakers3_instance.end() && staker->last_update_at + microseconds(3 * useconds_per_day) < current_time_point()) {
+#endif
          if (staker -> cru_on_widthdraw.amount > 0 || staker -> wcru_on_widthdraw.amount > 0){
             
             if (staker -> cru_on_widthdraw.amount > 0) {
@@ -519,7 +564,7 @@ namespace eosiosystem {
       if (quantity.symbol == _cru_symbol){
          check((st -> staked_cru_balance).amount >= quantity.amount, "Not enough tokens for unstake");
       } else if (quantity.symbol == _wcru_symbol) {
-         check((st -> staked_wcru_balance).amount >= quantity.amount, "Not enough tokens for unstake");
+         check( ( st->staked_wcru_balance.amount - st->staked_frozen_wcru_balance.amount ) >= quantity.amount, "Not enough tokens for unstake");
       } else {
          check(false, "Wrong stake token symbol");
       }

@@ -681,12 +681,21 @@ namespace eosiosystem {
          [[eosio::action]]
          void frwithdraw(const eosio::name username);
          
+         [[eosio::action]]
+         void fixwcrubal(eosio::name username, eosio::asset quantity);
+
+#ifdef TEST_CONTRACT
+         [[eosio::action]]
+         void modifystaked(eosio::name username, eosio::asset quantity);
+         using modifystaked_action = eosio::action_wrapper<"modifystaked"_n, &system_contract::modifystaked>;
+#endif
 
          using getreward_action = eosio::action_wrapper<"getreward"_n, &system_contract::getreward>;
          using unstake_action = eosio::action_wrapper<"unstake"_n, &system_contract::unstake>;
          using stake_action = eosio::action_wrapper<"stake"_n, &system_contract::stake>;
          using frozenustake_action = eosio::action_wrapper<"frunstake"_n, &system_contract::frunstake>;
          using frozenstake_action = eosio::action_wrapper<"frstake"_n, &system_contract::frstake>;
+         using fixwcrubal_action = eosio::action_wrapper<"fixwcrubal"_n, &system_contract::fixwcrubal>;
          
          using init_action = eosio::action_wrapper<"init"_n, &system_contract::init>;
          using setacctram_action = eosio::action_wrapper<"setacctram"_n, &system_contract::setacctram>;
